@@ -53,3 +53,5 @@ Issues and pull requests are welcome. If you spot a bug or have an idea for a ne
 ## License
 
 Released under the [MIT License](LICENSE).
+
+Copyright (c) 2026 Gokul Chandar
