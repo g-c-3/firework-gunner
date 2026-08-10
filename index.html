@@ -1,0 +1,1049 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Chromatic Barrage</title>
+<style>
+  :root{
+    --sky-top:#050818;
+    --sky-mid:#0b1130;
+    --sky-glow:#1a1450;
+    --panel:#0d1230cc;
+    --ink:#eef0ff;
+    --ink-dim:#9aa2d6;
+    --gold:#ffd93d;
+    --red:#ff4757;
+    --blue:#3fa9ff;
+    --green:#3ee08c;
+    --purple:#c77dff;
+    --cyan:#22d3ee;
+    --accent:#ff8a3d;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none;}
+  html,body{
+    margin:0; padding:0; width:100%; height:100%; overflow:hidden;
+    background:var(--sky-top);
+    font-family:'Rubik', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    touch-action:none;
+  }
+  #gameWrap{ position:relative; width:100vw; height:100vh; overflow:hidden; }
+  canvas{ position:absolute; top:0; left:0; display:block; }
+
+  /* --- top HUD --- */
+  #hud{
+    position:absolute; top:0; left:0; width:100%;
+    display:flex; align-items:flex-start; justify-content:flex-end;
+    padding:14px 16px; z-index:10; pointer-events:none;
+  }
+  #scoreBox{
+    background:var(--panel);
+    border:1px solid #3a3f7a80;
+    border-radius:14px;
+    padding:8px 18px;
+    backdrop-filter:blur(6px);
+    text-align:center;
+    min-width:110px;
+  }
+  #scoreLabel{ font-size:10px; letter-spacing:3px; color:var(--ink-dim); font-weight:600; }
+  #scoreVal{
+    font-size:26px; font-weight:800; color:var(--gold); line-height:1.1;
+    text-shadow:0 0 12px #ffd93d80;
+    font-variant-numeric:tabular-nums;
+  }
+
+  /* --- color palette: bottom-left, small triangle stack 1 / 2 / 3 --- */
+  #paletteTri{
+    position:absolute; left:12px; bottom:16px;
+    display:flex; flex-direction:column; align-items:center; gap:5px;
+    background:var(--panel); border:1px solid #3a3f7a80; border-radius:16px;
+    padding:9px 10px; backdrop-filter:blur(6px);
+    z-index:20;
+  }
+  .triRow{ display:flex; gap:5px; }
+  .triSwatch{
+    width:20px; height:20px; border-radius:50%;
+    border:2px solid #ffffff30;
+    cursor:pointer; transition:transform .15s ease;
+    position:relative; flex:none;
+  }
+  .triSwatch.active{ transform:scale(1.3); border-color:#ffffffee; }
+  .triSwatch.active::after{
+    content:''; position:absolute; inset:-5px; border-radius:50%;
+    border:2px solid currentColor; opacity:.6;
+    animation:pulseRing 1.1s ease-out infinite;
+  }
+  @keyframes pulseRing{
+    0%{ transform:scale(.85); opacity:.7;}
+    100%{ transform:scale(1.35); opacity:0;}
+  }
+
+  /* --- right side: flat FIRE rectangle up top, aim slider moved down below it --- */
+  #fireRect{
+    position:absolute; right:18px; bottom:112px;
+    width:150px; height:58px; z-index:20;
+    border-radius:14px;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    background:radial-gradient(circle at 30% 20%, #ffffff22, transparent 60%), var(--btn-color, #ff4757);
+    border:3px solid #ffffff55;
+    box-shadow:0 6px 18px #00000066, 0 0 20px var(--btn-color, #ff4757);
+    color:white; font-weight:800; font-size:15px; letter-spacing:2px;
+    transition:transform .08s ease, box-shadow .08s ease, opacity .15s ease;
+    cursor:pointer;
+  }
+  #fireRect.pressed{
+    transform:scale(.94);
+    box-shadow:0 3px 10px #00000066, 0 0 30px var(--btn-color, #ff4757);
+  }
+  #fireRect.reloading{ opacity:.72; }
+  #fireLabel{ pointer-events:none; text-shadow:0 1px 3px #00000080; }
+  #weaponBadge{
+    position:absolute; top:-9px; left:-9px; width:24px; height:24px; border-radius:50%;
+    background:#12163a; border:2px solid #ffffff55; display:flex; align-items:center;
+    justify-content:center; font-size:12px; pointer-events:none;
+  }
+  #ammoTrack{
+    width:82%; height:5px; border-radius:3px; background:#00000055;
+    overflow:hidden; margin-top:7px; pointer-events:none;
+  }
+  #ammoFill{ height:100%; width:100%; background:#ffffff; transition:width .1s linear, background .2s ease; }
+
+  #aimSlider{
+    position:absolute; right:18px; bottom:20px;
+    width:190px; height:50px; z-index:20;
+    pointer-events:none;
+  }
+  #sliderTrack{
+    position:absolute; left:6px; right:6px; top:50%; transform:translateY(-50%);
+    height:8px; border-radius:5px;
+    background:#171c42; border:1px solid #4a4f9a70;
+    box-shadow:inset 0 2px 6px #00000060;
+    pointer-events:none;
+  }
+  #sliderTrack::before{
+    content:''; position:absolute; left:50%; top:50%; width:2px; height:20px;
+    background:#4a4f9a90; transform:translate(-50%,-50%);
+  }
+  #sliderHandle{
+    position:absolute; top:50%; left:50%; width:42px; height:42px; border-radius:50%;
+    transform:translate(-50%,-50%);
+    background:radial-gradient(circle at 35% 30%, #ffffff33, transparent 60%), var(--btn-color, #ff4757);
+    border:3px solid #ffffff55;
+    box-shadow:0 4px 14px #00000066, 0 0 18px var(--btn-color, #ff4757);
+    transition:box-shadow .15s ease;
+    pointer-events:auto; touch-action:none; cursor:grab;
+  }
+  #sliderHandle:active{ cursor:grabbing; }
+  #aimHint{
+    position:absolute; right:2px; bottom:100%; margin-bottom:8px;
+    color:var(--ink-dim); font-size:10px; letter-spacing:1.5px;
+    font-weight:600; opacity:.55; text-align:right; line-height:1.5;
+    width:190px; pointer-events:none;
+  }
+
+  /* --- tap zone over the gun: opens the weapon picker --- */
+  #gunTapZone{
+    position:absolute; left:50%; bottom:0; width:150px; height:170px;
+    transform:translateX(-50%);
+    z-index:18; touch-action:none;
+  }
+  #gunHint{
+    position:absolute; left:50%; bottom:100%; transform:translateX(-50%); margin-bottom:4px;
+    color:var(--ink-dim); font-size:10px; letter-spacing:1.5px; font-weight:600;
+    opacity:.55; white-space:nowrap; pointer-events:none; text-align:center;
+  }
+  #blastPicker{
+    position:absolute; left:50%; bottom:196px;
+    transform:translateX(-50%) translateY(6px) scale(.92);
+    display:flex; gap:8px;
+    background:var(--panel); border:1px solid #3a3f7a80; border-radius:22px;
+    padding:10px 12px; backdrop-filter:blur(6px);
+    z-index:25; opacity:0; pointer-events:none;
+    transition:opacity .16s ease, transform .16s ease;
+  }
+  #blastPicker.open{
+    opacity:1; pointer-events:auto;
+    transform:translateX(-50%) translateY(0) scale(1);
+  }
+  .blastOption{
+    width:38px; height:38px; border-radius:50%;
+    background:#1c2350; border:2px solid #4a4f9a70;
+    display:flex; align-items:center; justify-content:center;
+    font-size:17px; color:var(--ink); cursor:pointer;
+    transition:transform .12s ease, border-color .12s ease, box-shadow .12s ease;
+  }
+  .blastOption.active{
+    border-color:#ffd93d; transform:scale(1.14);
+    box-shadow:0 0 12px #ffd93d80;
+  }
+  #blastPickerLabel{
+    position:absolute; left:50%; bottom:100%; transform:translateX(-50%); margin-bottom:6px;
+    font-size:10px; letter-spacing:1.5px; font-weight:700; color:var(--ink-dim);
+    white-space:nowrap;
+  }
+
+  #floaters{
+    position:absolute; top:0; left:0; width:100%; height:100%;
+    pointer-events:none; z-index:15; overflow:hidden;
+  }
+  .floatText{
+    position:absolute; font-weight:800; font-size:20px;
+    animation:floatUp 0.9s ease-out forwards;
+    text-shadow:0 2px 8px #00000090;
+    white-space:nowrap;
+  }
+  .floatText.bonus{
+    font-size:30px;
+    color:#ffd93d;
+    text-shadow:0 0 16px #ffd93dcc, 0 2px 8px #00000090;
+    animation:floatUpBig 1.05s ease-out forwards;
+  }
+  @keyframes floatUp{
+    0%{ opacity:1; transform:translateY(0) scale(1);}
+    100%{ opacity:0; transform:translateY(-56px) scale(1.15);}
+  }
+  @keyframes floatUpBig{
+    0%{ opacity:0; transform:translateY(0) scale(0.4) rotate(-4deg);}
+    18%{ opacity:1; transform:translateY(-10px) scale(1.25) rotate(2deg);}
+    100%{ opacity:0; transform:translateY(-70px) scale(1.05) rotate(0deg);}
+  }
+
+  #flash{ position:absolute; inset:0; background:#ff2f4d; opacity:0; pointer-events:none; z-index:30; }
+  #flash.hit{ animation:flashFade .35s ease-out; }
+  #flash.hit-big{ animation:flashFade .55s ease-out; }
+  @keyframes flashFade{ 0%{opacity:.32;} 100%{opacity:0;} }
+
+  #startOverlay{
+    position:absolute; inset:0; z-index:50;
+    background:radial-gradient(ellipse at 50% 30%, var(--sky-glow), var(--sky-top) 70%);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    text-align:center; padding:24px;
+  }
+  #startOverlay h1{
+    font-size:clamp(28px,7vw,46px); margin:0 0 6px; font-weight:800; letter-spacing:1px;
+    background:linear-gradient(90deg, var(--red), var(--gold), var(--green), var(--blue), var(--purple));
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+  }
+  #startOverlay p{ color:var(--ink-dim); max-width:360px; line-height:1.6; font-size:14px; margin:0 0 26px; }
+  #startBtn{
+    padding:14px 38px; border-radius:30px; border:none;
+    background:linear-gradient(90deg, var(--accent), var(--red));
+    color:white; font-weight:800; font-size:16px; letter-spacing:1px;
+    box-shadow:0 8px 24px #ff475740; cursor:pointer;
+  }
+  .hidden{ display:none !important; }
+</style>
+</head>
+<body>
+<div id="gameWrap">
+  <canvas id="c"></canvas>
+
+  <div id="hud">
+    <div id="scoreBox">
+      <div id="scoreLabel">SCORE</div>
+      <div id="scoreVal">0</div>
+    </div>
+  </div>
+
+  <div id="paletteTri">
+    <div class="triRow" id="triRow0"></div>
+    <div class="triRow" id="triRow1"></div>
+    <div class="triRow" id="triRow2"></div>
+  </div>
+
+  <div id="fireRect">
+    <div id="weaponBadge">\u25CF</div>
+    <div id="fireLabel">FIRE</div>
+    <div id="ammoTrack"><div id="ammoFill"></div></div>
+  </div>
+
+  <div id="aimSlider">
+    <div id="aimHint">DRAG THE DOT TO AIM</div>
+    <div id="sliderTrack"></div>
+    <div id="sliderHandle"></div>
+  </div>
+
+  <div id="gunTapZone">
+    <div id="gunHint">TAP GUN: CHOOSE WEAPON</div>
+  </div>
+
+  <div id="blastPicker">
+    <div id="blastPickerLabel">WEAPON STYLE</div>
+  </div>
+
+  <div id="floaters"></div>
+  <div id="flash"></div>
+
+  <div id="startOverlay">
+    <h1>CHROMATIC BARRAGE</h1>
+    <p>Match your firework's color to the falling target for +100 — and sometimes a bonus multiplier up to &times;10. Wrong color still bursts it, just -10. Miss one at the bottom and you lose more. Bullets bounce off the walls instead of vanishing. Tap the gun to pick a weapon — each reloads differently. Pick a color bottom-left, press FIRE on the right (hold to fire continuously), and drag the dot below it to aim.</p>
+    <button id="startBtn">START GAME</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+  const scoreVal = document.getElementById('scoreVal');
+  const triRows = [document.getElementById('triRow0'), document.getElementById('triRow1'), document.getElementById('triRow2')];
+  const fireRect = document.getElementById('fireRect');
+  const fireLabel = document.getElementById('fireLabel');
+  const weaponBadge = document.getElementById('weaponBadge');
+  const ammoFill = document.getElementById('ammoFill');
+  const aimSlider = document.getElementById('aimSlider');
+  const sliderHandle = document.getElementById('sliderHandle');
+  const aimHint = document.getElementById('aimHint');
+  const gunTapZone = document.getElementById('gunTapZone');
+  const gunHint = document.getElementById('gunHint');
+  const blastPicker = document.getElementById('blastPicker');
+  const floaters = document.getElementById('floaters');
+  const flashEl = document.getElementById('flash');
+  const startOverlay = document.getElementById('startOverlay');
+  const startBtn = document.getElementById('startBtn');
+
+  let W, H, DPR;
+  function resize(){
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth; H = window.innerHeight;
+    canvas.width = W * DPR; canvas.height = H * DPR;
+    canvas.style.width = W+'px'; canvas.style.height = H+'px';
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    gunX = W/2; gunY = H - 46;
+  }
+
+  const COLORS = [
+    { id:'red',    hex:'#ff4757' },
+    { id:'blue',   hex:'#3fa9ff' },
+    { id:'green',  hex:'#3ee08c' },
+    { id:'gold',   hex:'#ffd93d' },
+    { id:'purple', hex:'#c77dff' },
+    { id:'cyan',   hex:'#22d3ee' },
+  ];
+
+  // ---- color palette: triangle stack, row sizes 1 / 2 / 3 ----
+  let currentColor = COLORS[0];
+  const ROW_SIZES = [1, 2, 3];
+  let colorIdx = 0;
+  ROW_SIZES.forEach((count, rowI)=>{
+    for (let i=0;i<count;i++){
+      const c = COLORS[colorIdx++];
+      const sw = document.createElement('div');
+      sw.className = 'triSwatch' + (rowI===0 && i===0 ? ' active' : '');
+      sw.style.background = c.hex;
+      sw.style.color = c.hex;
+      sw.dataset.id = c.id;
+      sw.addEventListener('pointerdown', (e)=>{
+        e.stopPropagation();
+        currentColor = c;
+        document.querySelectorAll('.triSwatch').forEach(s=>s.classList.remove('active'));
+        sw.classList.add('active');
+        fireRect.style.setProperty('--btn-color', c.hex);
+        sliderHandle.style.setProperty('--btn-color', c.hex);
+        updateAmmoUI();
+      });
+      triRows[rowI].appendChild(sw);
+    }
+  });
+  fireRect.style.setProperty('--btn-color', currentColor.hex);
+  sliderHandle.style.setProperty('--btn-color', currentColor.hex);
+
+  // ---- weapon picker: tap the gun to choose how shots fire & burst ----
+  const BLAST_STYLES = [
+    { id:'classic',  icon:'\u25CF' },
+    { id:'shotgun',  icon:'\u2042' },
+    { id:'grenade',  icon:'\uD83D\uDCA3' },
+    { id:'sprinkle', icon:'\u2728' },
+    { id:'twin',     icon:'\u2016' },
+    { id:'rocket',   icon:'\uD83D\uDE80' },
+  ];
+  let currentBlastStyle = 'classic';
+
+  BLAST_STYLES.forEach((b, i)=>{
+    const btn = document.createElement('div');
+    btn.className = 'blastOption' + (i === 0 ? ' active' : '');
+    btn.textContent = b.icon;
+    btn.dataset.id = b.id;
+    btn.addEventListener('pointerdown', (e)=>{
+      e.stopPropagation();
+      currentBlastStyle = b.id;
+      document.querySelectorAll('.blastOption').forEach(o=>o.classList.remove('active'));
+      btn.classList.add('active');
+      weaponBadge.textContent = b.icon;
+      toggleBlastPicker(false);
+      updateAmmoUI();
+    });
+    blastPicker.appendChild(btn);
+  });
+  weaponBadge.textContent = BLAST_STYLES[0].icon;
+
+  let blastOpen = false;
+  function toggleBlastPicker(force){
+    blastOpen = force !== undefined ? force : !blastOpen;
+    blastPicker.classList.toggle('open', blastOpen);
+  }
+  gunTapZone.addEventListener('pointerdown', (e)=>{
+    e.stopPropagation();
+    gunHint.style.opacity = 0;
+    toggleBlastPicker();
+  });
+  document.addEventListener('pointerdown', (e)=>{
+    if (blastOpen && !blastPicker.contains(e.target) && !gunTapZone.contains(e.target)){
+      toggleBlastPicker(false);
+    }
+  });
+
+  // ---- per-weapon ammo & reload ----
+  const WEAPON_CONFIG = {
+    classic:  { max: 12, reload: 900  },
+    shotgun:  { max: 1,  reload: 750  },
+    grenade:  { max: 1,  reload: 1300 },
+    sprinkle: { max: 1,  reload: 650  },
+    twin:     { max: 8,  reload: 850  },
+    rocket:   { max: 1,  reload: 1000 },
+  };
+  let ammoState = {};
+  function initAmmoState(){
+    ammoState = {};
+    Object.keys(WEAPON_CONFIG).forEach(id=>{
+      ammoState[id] = { current: WEAPON_CONFIG[id].max, reloading:false, reloadStart:0 };
+    });
+  }
+  initAmmoState();
+
+  function updateAmmoUI(){
+    const cfg = WEAPON_CONFIG[currentBlastStyle];
+    const st = ammoState[currentBlastStyle];
+    if (!cfg || !st) return;
+    if (st.reloading){
+      const frac = Math.min(1, (performance.now() - st.reloadStart) / cfg.reload);
+      ammoFill.style.width = (frac*100) + '%';
+      ammoFill.style.background = '#ff8a3d';
+      fireLabel.textContent = 'RELOAD';
+      fireRect.classList.add('reloading');
+    } else {
+      const frac = st.current / cfg.max;
+      ammoFill.style.width = (frac*100) + '%';
+      ammoFill.style.background = currentColor.hex;
+      fireLabel.textContent = 'FIRE';
+      fireRect.classList.remove('reloading');
+    }
+  }
+
+  // ---- FIRE button: hold to fire continuously (each pull gated by ammo) ----
+  const FIRE_RATE_MS = 140;
+  let fireInterval = null;
+  function stopFiring(){
+    fireRect.classList.remove('pressed');
+    if (fireInterval){ clearInterval(fireInterval); fireInterval = null; }
+  }
+  fireRect.addEventListener('pointerdown', (e)=>{
+    e.stopPropagation();
+    fireRect.setPointerCapture(e.pointerId);
+    fireRect.classList.add('pressed');
+    fire();
+    if (fireInterval) clearInterval(fireInterval);
+    fireInterval = setInterval(fire, FIRE_RATE_MS);
+  });
+  fireRect.addEventListener('pointerup', stopFiring);
+  fireRect.addEventListener('pointercancel', stopFiring);
+
+  // ---- gun state (rendered gun is fixed bottom-center; slider only sets its angle) ----
+  let gunX=0, gunY=0;
+  const MIN_A = -(Math.PI - 0.15);
+  const MAX_A = -0.15;
+  let gunAngle = -Math.PI/2;
+
+  const HANDLE_R = 21;
+
+  function setAngleFromClientX(clientX){
+    const rect = aimSlider.getBoundingClientRect();
+    const usable = rect.width - HANDLE_R*2;
+    let relX = clientX - rect.left - HANDLE_R;
+    relX = Math.max(0, Math.min(usable, relX));
+    const fraction = usable > 0 ? relX / usable : 0.5;
+    gunAngle = MIN_A + fraction * (MAX_A - MIN_A);
+    sliderHandle.style.left = (relX + HANDLE_R) + 'px';
+  }
+
+  let draggingSlider = false;
+  sliderHandle.addEventListener('pointerdown', (e)=>{
+    e.stopPropagation();
+    draggingSlider = true;
+    aimHint.style.opacity = 0;
+    sliderHandle.setPointerCapture(e.pointerId);
+    setAngleFromClientX(e.clientX);
+  });
+  sliderHandle.addEventListener('pointermove', (e)=>{
+    if (!draggingSlider) return;
+    setAngleFromClientX(e.clientX);
+  });
+  sliderHandle.addEventListener('pointerup', ()=>{ draggingSlider = false; });
+  sliderHandle.addEventListener('pointercancel', ()=>{ draggingSlider = false; });
+
+  // ---- score ----
+  let score = 0;
+  function addScoreSilent(delta){
+    score = score + delta;
+    scoreVal.textContent = score;
+    scoreVal.style.color = score < 0 ? '#ff4757' : '#ffd93d';
+    scoreVal.style.textShadow = score < 0 ? '0 0 12px #ff475780' : '0 0 12px #ffd93d80';
+  }
+  function spawnFloatText(text, x, y, color, big){
+    const el = document.createElement('div');
+    el.className = 'floatText' + (big ? ' bonus' : '');
+    el.textContent = text;
+    el.style.left = (x-24)+'px';
+    el.style.top = (y-10)+'px';
+    if (!big) el.style.color = color;
+    floaters.appendChild(el);
+    setTimeout(()=>el.remove(), big ? 1100 : 950);
+  }
+  function flashScreen(color, big){
+    flashEl.style.background = color;
+    flashEl.classList.remove('hit','hit-big');
+    void flashEl.offsetWidth;
+    flashEl.classList.add(big ? 'hit-big' : 'hit');
+  }
+
+  // ---- game state ----
+  let running = false;
+  let bullets = [];
+  let targets = [];
+  let particles = [];
+  let stars = [];
+  let lastSpawn = 0;
+  let spawnInterval = 1300;
+  let fallSpeedBase = 55;
+  let elapsed = 0;
+
+  function initStars(){
+    stars = [];
+    const n = Math.floor((W*H)/9000);
+    for (let i=0;i<n;i++){
+      stars.push({
+        x: Math.random()*W, y: Math.random()*H*0.85,
+        r: Math.random()*1.4+0.3,
+        phase: Math.random()*Math.PI*2,
+        speed: Math.random()*1.4+0.4
+      });
+    }
+  }
+
+  function reset(){
+    score = 0; scoreVal.textContent = '0';
+    scoreVal.style.color = '#ffd93d';
+    scoreVal.style.textShadow = '0 0 12px #ffd93d80';
+    bullets = []; targets = []; particles = [];
+    spawnInterval = 1300; fallSpeedBase = 55; elapsed = 0; lastSpawn = 0;
+    gunAngle = -Math.PI/2;
+    sliderHandle.style.left = '50%';
+    initAmmoState();
+    updateAmmoUI();
+  }
+
+  function spawnTarget(){
+    const r = 22 + Math.random()*10;
+    const c = COLORS[Math.floor(Math.random()*COLORS.length)];
+    targets.push({
+      x: r + Math.random()*(W - r*2),
+      y: -r - 10,
+      r,
+      color: c,
+      wobble: Math.random()*Math.PI*2,
+    });
+  }
+
+  // ---- weapon firing patterns ----
+  const BULLET_STYLES = ['spark', 'comet', 'streamer'];
+
+  function makeBullet(angle, speed, opts){
+    opts = opts || {};
+    const tipDist = 46;
+    const tipX = gunX + Math.cos(gunAngle)*tipDist;
+    const tipY = gunY + Math.sin(gunAngle)*tipDist;
+    const style = opts.style || BULLET_STYLES[Math.floor(Math.random()*BULLET_STYLES.length)];
+    const maxTrail = style === 'comet' ? 14 : style === 'streamer' ? 10 : 6;
+    return {
+      x: tipX, y: tipY,
+      vx: Math.cos(angle)*speed,
+      vy: Math.sin(angle)*speed,
+      color: currentColor,
+      trail: [],
+      style,
+      maxTrail,
+      bounces: 0,
+      radius: opts.radius || 4,
+      gravity: !!opts.gravity,
+    };
+  }
+
+  function fireClassic(){
+    const speed = 480 + Math.random()*260;
+    bullets.push(makeBullet(gunAngle, speed, {}));
+  }
+  function fireShotgun(){
+    const pelletCount = 6, spreadDeg = 22;
+    for (let i=0;i<pelletCount;i++){
+      const t = pelletCount === 1 ? 0 : (i/(pelletCount-1)) - 0.5;
+      const offsetRad = (t*spreadDeg)*Math.PI/180 + (Math.random()-0.5)*0.03;
+      const speed = 560 + Math.random()*120;
+      bullets.push(makeBullet(gunAngle+offsetRad, speed, { style:'spark', radius:3 }));
+    }
+  }
+  function fireGrenade(){
+    const speed = 420 + Math.random()*50;
+    bullets.push(makeBullet(gunAngle, speed, { style:'comet', radius:7, gravity:true }));
+  }
+  function fireSprinkle(){
+    const pelletCount = 11, spreadDeg = 46;
+    for (let i=0;i<pelletCount;i++){
+      const offsetRad = ((Math.random()-0.5)*spreadDeg)*Math.PI/180;
+      const speed = 380 + Math.random()*260;
+      bullets.push(makeBullet(gunAngle+offsetRad, speed, { style:'spark', radius:2.4 }));
+    }
+  }
+  function fireTwin(){
+    const speed = 560 + Math.random()*140;
+    const perp = gunAngle + Math.PI/2;
+    const off = 9;
+    const b1 = makeBullet(gunAngle, speed, { style:'streamer' });
+    b1.x += Math.cos(perp)*off; b1.y += Math.sin(perp)*off;
+    const b2 = makeBullet(gunAngle, speed, { style:'streamer' });
+    b2.x -= Math.cos(perp)*off; b2.y -= Math.sin(perp)*off;
+    bullets.push(b1, b2);
+  }
+  function fireRocket(){
+    bullets.push(makeBullet(gunAngle, 700, { style:'comet', radius:6 }));
+  }
+
+  function fire(){
+    if (!running) return;
+    const cfg = WEAPON_CONFIG[currentBlastStyle];
+    const st = ammoState[currentBlastStyle];
+    if (!cfg || !st || st.reloading || st.current <= 0) return;
+
+    switch(currentBlastStyle){
+      case 'shotgun':  fireShotgun();  break;
+      case 'grenade':  fireGrenade();  break;
+      case 'sprinkle': fireSprinkle(); break;
+      case 'twin':     fireTwin();     break;
+      case 'rocket':   fireRocket();   break;
+      default:         fireClassic();
+    }
+
+    st.current -= 1;
+    if (st.current <= 0){
+      st.reloading = true;
+      st.reloadStart = performance.now();
+    }
+    updateAmmoUI();
+  }
+
+  function explode(x, y, color, big){
+    const count = big ? 34 : 14;
+    for (let i=0;i<count;i++){
+      const ang = (Math.PI*2/count)*i + Math.random()*0.3;
+      const spd = (big ? 140 : 70) + Math.random()*90;
+      particles.push({
+        x, y,
+        vx: Math.cos(ang)*spd, vy: Math.sin(ang)*spd,
+        life: 0, maxLife: 0.7 + Math.random()*0.4,
+        color: color.hex, r: big ? 3.2 : 2.2
+      });
+    }
+  }
+
+  // Style-aware burst for correct-color hits - each weapon bursts differently.
+  function performBlast(x, y, color, mult){
+    mult = mult || 1;
+    const scale = Math.min(2.2, 1 + (mult-1)*0.12);
+
+    switch(currentBlastStyle){
+      case 'shotgun': {
+        [{count:16, spd:85}, {count:24, spd:150}].forEach(layer=>{
+          const n = Math.round(layer.count * scale);
+          for (let i=0;i<n;i++){
+            const ang = (Math.PI*2/n)*i + Math.random()*0.2;
+            const spd = layer.spd*scale + Math.random()*40;
+            particles.push({ x, y, vx:Math.cos(ang)*spd, vy:Math.sin(ang)*spd,
+              life:0, maxLife:0.75+Math.random()*0.4, color:color.hex, r:2.4 });
+          }
+        });
+        break;
+      }
+      case 'twin': {
+        const n = Math.round(24 * scale);
+        for (let i=0;i<n;i++){
+          const ang = (Math.PI*2/n)*i + Math.random()*0.2;
+          const spd = 65*scale + Math.random()*40;
+          particles.push({ x, y, vx:Math.cos(ang)*spd, vy:Math.sin(ang)*spd,
+            life:0, maxLife:1.3+Math.random()*0.5, color:color.hex, r:2, gravityMult:2.6 });
+        }
+        break;
+      }
+      case 'rocket': {
+        const n = Math.round(9 * scale);
+        for (let i=0;i<n;i++){
+          const ang = (Math.PI*2/n)*i;
+          const spd = 120*scale;
+          const px = x + Math.cos(ang)*8, py = y + Math.sin(ang)*8;
+          particles.push({ x:px, y:py, vx:Math.cos(ang)*spd, vy:Math.sin(ang)*spd,
+            life:0, maxLife:0.28, color:color.hex, r:2.4 });
+          const fx = px + Math.cos(ang)*38, fy = py + Math.sin(ang)*38;
+          setTimeout(()=>{
+            for (let j=0;j<6;j++){
+              const a2 = (Math.PI*2/6)*j;
+              particles.push({ x:fx, y:fy, vx:Math.cos(a2)*75, vy:Math.sin(a2)*75,
+                life:0, maxLife:0.5, color:color.hex, r:2 });
+            }
+          }, 240);
+        }
+        break;
+      }
+      case 'grenade': {
+        particles.push({ x, y, vx:0, vy:0, life:0, maxLife:0.55, color:color.hex, r:8, kind:'ring' });
+        particles.push({ x, y, vx:0, vy:0, life:0, maxLife:0.8, color:'#ffffff', r:4, kind:'ring' });
+        const n = Math.round(20 * scale);
+        for (let i=0;i<n;i++){
+          const ang = (Math.PI*2/n)*i + Math.random()*0.3;
+          const spd = 130*scale + Math.random()*90;
+          particles.push({ x, y, vx:Math.cos(ang)*spd, vy:Math.sin(ang)*spd,
+            life:0, maxLife:0.65+Math.random()*0.35, color:color.hex, r:3 });
+        }
+        break;
+      }
+      case 'sprinkle': {
+        const n = Math.round(30 * scale);
+        for (let i=0;i<n;i++){
+          const ang = Math.random()*Math.PI*2;
+          const spd = Math.random()*32;
+          particles.push({ x, y, vx:Math.cos(ang)*spd, vy:Math.sin(ang)*spd,
+            life:0, maxLife:0.15+Math.random()*0.35, color: Math.random()<0.5?color.hex:'#ffffff', r:2.6 });
+        }
+        break;
+      }
+      default: {
+        const n = Math.round(28 * scale);
+        for (let i=0;i<n;i++){
+          const ang = (Math.PI*2/n)*i + Math.random()*0.3;
+          const spd = 110*scale + Math.random()*80;
+          particles.push({ x, y, vx:Math.cos(ang)*spd, vy:Math.sin(ang)*spd,
+            life:0, maxLife:0.7+Math.random()*0.4, color:color.hex, r:2.8 });
+        }
+      }
+    }
+
+    if (mult >= 3){
+      particles.push({ x, y, vx:0, vy:0, life:0, maxLife:0.45+mult*0.03, color:'#ffd93d', r:10, kind:'ring' });
+    }
+  }
+
+  function bounceSpark(x, y, colorHex){
+    for (let i=0;i<7;i++){
+      const ang = Math.random()*Math.PI*2;
+      const spd = 40 + Math.random()*70;
+      particles.push({
+        x, y,
+        vx: Math.cos(ang)*spd, vy: Math.sin(ang)*spd,
+        life: 0, maxLife: 0.35 + Math.random()*0.2,
+        color: colorHex, r: 1.8
+      });
+    }
+  }
+
+  const MULT_TABLE = [
+    {m:1,  w:0.42}, {m:2, w:0.20}, {m:3, w:0.13}, {m:4, w:0.08}, {m:5, w:0.06},
+    {m:6,  w:0.04}, {m:7, w:0.03}, {m:8, w:0.02}, {m:9, w:0.012}, {m:10, w:0.008},
+  ];
+  function rollMultiplier(){
+    let r = Math.random(), acc = 0;
+    for (const e of MULT_TABLE){
+      acc += e.w;
+      if (r <= acc) return e.m;
+    }
+    return 1;
+  }
+
+  function update(dt){
+    elapsed += dt;
+    spawnInterval = Math.max(520, 1300 - elapsed*10);
+    fallSpeedBase = Math.min(150, 55 + elapsed*1.1);
+
+    lastSpawn += dt*1000;
+    if (lastSpawn > spawnInterval){
+      lastSpawn = 0;
+      spawnTarget();
+    }
+
+    // resolve any completed reloads
+    Object.keys(ammoState).forEach(id=>{
+      const st = ammoState[id];
+      const cfg = WEAPON_CONFIG[id];
+      if (st.reloading && performance.now() - st.reloadStart >= cfg.reload){
+        st.reloading = false;
+        st.current = cfg.max;
+      }
+    });
+    updateAmmoUI();
+
+    for (let i=bullets.length-1;i>=0;i--){
+      const b = bullets[i];
+      b.trail.push({x:b.x,y:b.y});
+      if (b.trail.length > b.maxTrail) b.trail.shift();
+      if (b.gravity) b.vy += 260*dt;
+      b.x += b.vx*dt; b.y += b.vy*dt;
+
+      const rad = b.radius || 4;
+      let bounced = false;
+      if (b.x < rad){ b.x = rad; b.vx = -b.vx; bounced = true; }
+      else if (b.x > W-rad){ b.x = W-rad; b.vx = -b.vx; bounced = true; }
+      if (b.y < rad){ b.y = rad; b.vy = -b.vy; bounced = true; }
+
+      if (bounced){
+        bounceSpark(b.x, b.y, b.color.hex);
+        b.bounces += 1;
+        if (b.bounces >= 3){ bullets.splice(i,1); continue; }
+      }
+
+      if (b.y > H+20){
+        bullets.splice(i,1); continue;
+      }
+    }
+
+    for (let i=targets.length-1;i>=0;i--){
+      const t = targets[i];
+      t.y += fallSpeedBase*dt;
+      t.wobble += dt*2;
+      t.x += Math.sin(t.wobble)*0.35;
+
+      if (t.y - t.r > H){
+        targets.splice(i,1);
+        addScoreSilent(-50);
+        spawnFloatText('-50', t.x, H-60, '#ff4757');
+        flashScreen('#ff2f4d', false);
+        continue;
+      }
+    }
+
+    for (let bi=bullets.length-1; bi>=0; bi--){
+      const b = bullets[bi];
+      let consumed = false;
+      for (let ti=targets.length-1; ti>=0; ti--){
+        const t = targets[ti];
+        const dx = b.x - t.x, dy = b.y - t.y;
+        const hitDist = t.r + (b.radius || 4) + 2;
+        if (dx*dx + dy*dy <= hitDist*hitDist){
+          consumed = true;
+          if (b.color.id === t.color.id){
+            const mult = rollMultiplier();
+            const pts = 100 * mult;
+            performBlast(t.x, t.y, t.color, mult);
+            if (mult > 1){
+              spawnFloatText('\u00d7'+mult+'  +'+pts, t.x, t.y, '#ffd93d', true);
+              if (mult >= 8) flashScreen('#ffd93d', true);
+            } else {
+              spawnFloatText('+100', t.x, t.y, '#3ee08c', false);
+            }
+            addScoreSilent(pts);
+          } else {
+            explode(t.x, t.y, t.color, false);
+            addScoreSilent(-10);
+            spawnFloatText('-10', t.x, t.y, '#ff4757', false);
+          }
+          targets.splice(ti,1);
+          break;
+        }
+      }
+      if (consumed) bullets.splice(bi,1);
+    }
+
+    for (let i=particles.length-1;i>=0;i--){
+      const p = particles[i];
+      p.life += dt;
+      if (p.life >= p.maxLife){ particles.splice(i,1); continue; }
+      p.x += p.vx*dt; p.y += p.vy*dt;
+      p.vy += 90*dt*(p.gravityMult || 1);
+      p.vx *= 0.98;
+    }
+  }
+
+  function drawBackground(){
+    const g = ctx.createLinearGradient(0,0,0,H);
+    g.addColorStop(0, '#050818');
+    g.addColorStop(0.55, '#0b1130');
+    g.addColorStop(1, '#161046');
+    ctx.fillStyle = g;
+    ctx.fillRect(0,0,W,H);
+
+    for (const s of stars){
+      const tw = 0.5 + 0.5*Math.sin(elapsed*s.speed + s.phase);
+      ctx.globalAlpha = 0.25 + tw*0.6;
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.r, 0, Math.PI*2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    const hg = ctx.createRadialGradient(gunX, H, 10, gunX, H, 260);
+    hg.addColorStop(0, currentColor.hex+'33');
+    hg.addColorStop(1, 'transparent');
+    ctx.fillStyle = hg;
+    ctx.fillRect(0, H-260, W, 260);
+  }
+
+  function drawGun(){
+    ctx.save();
+    ctx.translate(gunX, gunY);
+
+    ctx.fillStyle = '#20264f';
+    ctx.strokeStyle = '#3a3f7a';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.ellipse(0, 6, 34, 16, 0, 0, Math.PI*2);
+    ctx.fill(); ctx.stroke();
+
+    ctx.rotate(gunAngle + Math.PI/2);
+
+    const bg = ctx.createLinearGradient(0,-58,0,0);
+    bg.addColorStop(0, currentColor.hex);
+    bg.addColorStop(1, '#2a2f5f');
+    ctx.fillStyle = bg;
+    ctx.strokeStyle = '#ffffff30';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.roundRect(-11, -58, 22, 60, 8);
+    ctx.fill(); ctx.stroke();
+
+    ctx.beginPath();
+    ctx.fillStyle = currentColor.hex;
+    ctx.globalAlpha = 0.7 + 0.3*Math.sin(elapsed*8);
+    ctx.arc(0, -58, 9, 0, Math.PI*2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
+    ctx.beginPath();
+    ctx.fillStyle = '#2a2f5f';
+    ctx.strokeStyle = '#4a4f9a';
+    ctx.lineWidth = 2;
+    ctx.arc(0, 0, 17, 0, Math.PI*2);
+    ctx.fill(); ctx.stroke();
+
+    ctx.restore();
+  }
+
+  function drawTargets(){
+    for (const t of targets){
+      ctx.save();
+      ctx.beginPath();
+      const grad = ctx.createRadialGradient(t.x-t.r*0.3, t.y-t.r*0.3, 2, t.x, t.y, t.r);
+      grad.addColorStop(0, t.color.hex);
+      grad.addColorStop(1, t.color.hex);
+      ctx.fillStyle = grad;
+      ctx.arc(t.x, t.y, t.r, 0, Math.PI*2);
+      ctx.fill();
+      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = '#ffffff55';
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  function drawBullets(){
+    for (const b of bullets){
+      const isComet = b.style === 'comet';
+      const isStreamer = b.style === 'streamer';
+      const sizeMult = (b.radius || 4) / 4;
+      const coreR = (isComet ? 6 : isStreamer ? 4 : 4.5) * sizeMult;
+      const trailW = (isComet ? 5.5 : isStreamer ? 3.2 : 3.2) * sizeMult;
+
+      for (let i=0;i<b.trail.length;i++){
+        const pt = b.trail[i];
+        const frac = i/b.trail.length;
+        ctx.globalAlpha = frac * (isComet ? 0.65 : 0.5);
+        ctx.fillStyle = b.color.hex;
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, trailW*frac, 0, Math.PI*2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+
+      if (isStreamer){
+        ctx.beginPath();
+        ctx.strokeStyle = b.color.hex + 'aa';
+        ctx.lineWidth = 2;
+        ctx.arc(b.x, b.y, coreR+5, 0, Math.PI*2);
+        ctx.stroke();
+      }
+
+      ctx.beginPath();
+      ctx.fillStyle = '#ffffff';
+      ctx.arc(b.x, b.y, coreR, 0, Math.PI*2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.fillStyle = b.color.hex;
+      ctx.arc(b.x, b.y, coreR*0.65, 0, Math.PI*2);
+      ctx.fill();
+    }
+  }
+
+  function drawParticles(){
+    for (const p of particles){
+      const alpha = 1 - (p.life/p.maxLife);
+      ctx.globalAlpha = Math.max(alpha,0);
+      if (p.kind === 'ring'){
+        const growth = 190 * (p.life/p.maxLife);
+        ctx.beginPath();
+        ctx.strokeStyle = p.color;
+        ctx.lineWidth = 3;
+        ctx.arc(p.x, p.y, p.r + growth, 0, Math.PI*2);
+        ctx.stroke();
+      } else {
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
+        ctx.fill();
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    drawBackground();
+    drawTargets();
+    drawParticles();
+    drawBullets();
+    drawGun();
+  }
+
+  let lastTime = 0;
+  function loop(ts){
+    if (!running) return;
+    if (!lastTime) lastTime = ts;
+    let dt = (ts - lastTime)/1000;
+    lastTime = ts;
+    dt = Math.min(dt, 0.05);
+    update(dt);
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  startBtn.addEventListener('click', ()=>{
+    startOverlay.classList.add('hidden');
+    reset();
+    running = true;
+    lastTime = 0;
+    requestAnimationFrame(loop);
+  });
+
+  window.addEventListener('resize', ()=>{ resize(); initStars(); });
+  resize();
+  initStars();
+  updateAmmoUI();
+  draw();
+})();
+</script>
+</body>
+</html>
